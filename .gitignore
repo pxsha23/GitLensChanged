@@ -14,3 +14,6 @@ coverage/
 # Local secrets (e.g. a personal GitHub token)
 .env
 .env.*
+
+# Jenkins test report
+test-results.xml
