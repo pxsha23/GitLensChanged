@@ -1,0 +1,112 @@
+# GitLens CI/CD pipeline
+# GitHub (push / pull request) -> Build -> Automated Testing -> Code Quality Check -> Deployment (GitHub Pages)
+name: GitLens CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # lets you re-run the pipeline by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 1. Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code from GitHub
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies (clean, from package-lock.json)
+        run: npm ci
+
+      - name: Build production bundle with Vite
+        run: npm run build
+
+      - name: Save build output for deployment
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  test:
+    name: 2. Automated Testing
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Run unit tests with coverage
+        run: |
+          npm run test:coverage 2>&1 | tee test-output.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Publish test summary
+        if: always()
+        run: |
+          echo "## Test results" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^# (tests|pass|fail)" test-output.txt >> "$GITHUB_STEP_SUMMARY" || true
+          sed -n '/start of coverage report/,/end of coverage report/p' test-output.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  quality:
+    name: 3. Code Quality Check
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Install ESLint
+        run: npm install --no-save eslint@9.17.0 @eslint/js@9.17.0 globals@15.14.0 eslint-plugin-react-hooks@5.1.0 eslint-plugin-react-refresh@0.4.16
+
+      - name: Run ESLint (errors fail the pipeline, warnings are reported)
+        run: |
+          npx eslint . 2>&1 | tee lint-output.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Publish lint summary
+        if: always()
+        run: |
+          echo "## ESLint report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          (tail -n 5 lint-output.txt | grep -E "problem" || echo "No problems found") >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: 4. Deploy to GitHub Pages
+    needs: quality
+    # Pull requests are only checked; only code merged into main goes live
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy build to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
