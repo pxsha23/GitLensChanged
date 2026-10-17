@@ -1,7 +1,7 @@
 # GitLens: Agile Project Plan
 
 **Product:** GitLens, a web app that turns a GitHub repository's commit history into a visual dashboard (timeline, contributor leaderboard, file-risk heatmap, bus-factor alert).
-**Team (2):** Piyusha Kate (Developer + DevOps), _Kshitija Ahire_ (Developer + Tester)
+**Team (2):** Piyusha Kate (Developer + DevOps), Kshitija Ahire (Developer + Tester)
 **Method:** Scrum, 2 sprints × 1 week, with a GitHub Actions CI/CD pipeline running on every push and pull request.
 
 ---
